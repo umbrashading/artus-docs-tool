@@ -5,5 +5,6 @@
   "company_phone": "+00 123 456 789",
   "footer_text": "Internal use only",
   "logo_path": "assets/logo.png",
-  "primary_color_hex": "#1F4E79"
+  "primary_color_hex": "#004225",
+  "accent_color": "#CCBF9E"
 }

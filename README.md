@@ -28,7 +28,18 @@ This produces:
 - `output/order_confirmation_<document_number>.pdf`
 - `output/proforma_<document_number>.pdf`
 
-3. Or generate directly from pasted text (no temp files needed):
+3. Generate from your raw copied order format (recommended for your workflow):
+
+```bash
+python3 generate_pdfs.py \
+  --order-file sample_data/order_raw.txt \
+  --branding branding.example.json \
+  --output-dir output
+```
+
+You can also pass the raw block directly with `--order-text`.
+
+4. Or generate directly from pasted table text (legacy split mode, no temp files needed):
 
 ```bash
 python3 generate_pdfs.py \
@@ -86,8 +97,13 @@ If `logo_path` is omitted or file is missing, PDFs are generated without logo.
 
 Color keys:
 
-- `accent_color` (preferred)
-- `primary_color_hex` (legacy fallback, still supported)
+- `primary_color_hex` (main brand color)
+- `accent_color` (secondary/highlight color)
+
+Current example uses your requested palette:
+
+- `primary_color_hex`: `#004225`
+- `accent_color`: `#CCBF9E`
 
 ## Why this is intentionally basic
 

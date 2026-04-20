@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -47,6 +49,7 @@ class Item:
     quantity: Decimal
     unit_price: Decimal
     tax_rate: Decimal
+    details: str = ""
 
     @property
     def net_total(self) -> Decimal:
@@ -118,11 +121,194 @@ def parse_meta(path: Path) -> Dict[str, str]:
 
 
 def parse_decimal(value: str, field_name: str) -> Decimal:
-    cleaned = value.replace(" ", "").replace(",", ".")
+    raw = value.strip()
+    number_match = re.search(r"-?\d+(?:[.,]\d+)?", raw)
+    if not number_match:
+        raise ValueError(f"Invalid number for {field_name}: '{value}'")
+    cleaned = number_match.group(0).replace(",", ".")
     try:
         return Decimal(cleaned)
     except InvalidOperation as exc:
         raise ValueError(f"Invalid number for {field_name}: '{value}'") from exc
+
+
+def parse_amount_currency(value: str) -> Tuple[Decimal | None, str]:
+    amount = None
+    currency = ""
+    number_match = re.search(r"-?\d+(?:[.,]\d+)?", value)
+    if number_match:
+        try:
+            amount = Decimal(number_match.group(0).replace(",", "."))
+        except InvalidOperation:
+            amount = None
+        suffix = value[number_match.end() :].strip()
+        currency_match = re.search(r"[A-Za-z]{3}", suffix)
+        if currency_match:
+            currency = currency_match.group(0).upper()
+    return amount, currency
+
+
+def normalize_key(value: str) -> str:
+    lowered = value.strip().lower()
+    collapsed = re.sub(r"\s+", "_", lowered)
+    return re.sub(r"[^a-z0-9_]", "", collapsed)
+
+
+def extract_document_number(order_value: str) -> str:
+    bracket_match = re.search(r"\[([^\]]+)\]", order_value)
+    if bracket_match:
+        return bracket_match.group(1).strip()
+    return order_value.strip()
+
+
+def read_label_value(lines: List[str], index: int) -> Tuple[Tuple[str, str] | None, int]:
+    line = lines[index].strip()
+    match = re.match(r"^([^:]+):\s*(.*)$", line)
+    if not match:
+        return None, index + 1
+
+    key = normalize_key(match.group(1))
+    value = match.group(2).strip()
+    next_index = index + 1
+    if value:
+        return (key, value), next_index
+
+    while next_index < len(lines) and not lines[next_index].strip():
+        next_index += 1
+    if next_index < len(lines):
+        candidate = lines[next_index].strip()
+        if ":" not in candidate:
+            return (key, candidate), next_index + 1
+
+    return (key, value), next_index
+
+
+def parse_order_text(order_text: str) -> Tuple[Dict[str, str], List[Item]]:
+    lines = order_text.splitlines()
+    meta_pairs: List[Tuple[str, str]] = []
+    raw_items: List[Dict[str, str]] = []
+    current_item: Dict[str, str] | None = None
+    idx = 0
+
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if not stripped:
+            idx += 1
+            continue
+
+        item_match = re.match(r"(?i)^item\s*:\s*(.*)$", stripped)
+        if item_match:
+            if current_item is not None:
+                raw_items.append(current_item)
+            current_item = {}
+            item_number = item_match.group(1).strip()
+            if item_number:
+                current_item["item_number"] = item_number
+            idx += 1
+            continue
+
+        pair, next_idx = read_label_value(lines, idx)
+        if pair is None:
+            idx += 1
+            continue
+
+        key, value = pair
+        if current_item is None:
+            meta_pairs.append((key, value))
+        else:
+            current_item[key] = value
+        idx = next_idx
+
+    if current_item is not None:
+        raw_items.append(current_item)
+
+    meta: Dict[str, str] = {}
+    for key, value in meta_pairs:
+        if value:
+            meta[key] = value
+
+    if not meta and not raw_items:
+        raise ValueError("Could not parse any fields from order text.")
+
+    if "order" in meta and "document_number" not in meta:
+        meta["document_number"] = extract_document_number(meta["order"])
+    if "client" in meta and "customer_name" not in meta:
+        meta["customer_name"] = meta["client"]
+    if "address" in meta and "customer_address" not in meta:
+        meta["customer_address"] = meta["address"]
+
+    order_total = meta.get("total_cost", "")
+    if order_total:
+        amount, currency = parse_amount_currency(order_total)
+        if amount is not None:
+            meta["reported_total_cost"] = str(amount)
+        if currency and "currency" not in meta:
+            meta["currency"] = currency
+    if "currency" not in meta:
+        meta["currency"] = "GBP"
+
+    items: List[Item] = []
+    for item_index, raw_item in enumerate(raw_items, start=1):
+        quantity = Decimal("1")
+        if raw_item.get("quantity"):
+            quantity = parse_decimal(raw_item["quantity"], "quantity")
+        if quantity == 0:
+            quantity = Decimal("1")
+
+        if raw_item.get("unit_price"):
+            unit_price = parse_decimal(raw_item["unit_price"], "unit_price")
+        elif raw_item.get("total_cost"):
+            total_cost = parse_decimal(raw_item["total_cost"], "total_cost")
+            unit_price = total_cost / quantity
+        else:
+            unit_price = Decimal("0")
+
+        tax_rate = Decimal("0")
+        if raw_item.get("tax_rate"):
+            tax_rate = parse_decimal(raw_item["tax_rate"], "tax_rate")
+
+        reference = raw_item.get("reference", "").strip()
+        product_id = raw_item.get("productid", "").strip()
+        description = " - ".join(part for part in [reference, product_id] if part)
+        if not description:
+            description = f"Item {raw_item.get('item_number', str(item_index))}"
+
+        detail_order = [
+            "install",
+            "mount",
+            "colour",
+            "stile",
+            "frame",
+            "frame_sides",
+            "framesides",
+            "louvre",
+            "width",
+            "height",
+            "sqm",
+        ]
+        details: List[str] = []
+        if raw_item.get("item_number"):
+            details.append(f"Item {raw_item['item_number']}")
+        for key in detail_order:
+            value = raw_item.get(key, "").strip()
+            if not value:
+                continue
+            details.append(f"{key.replace('_', ' ').title()}: {value}")
+
+        items.append(
+            Item(
+                description=description,
+                quantity=quantity,
+                unit_price=unit_price,
+                tax_rate=tax_rate,
+                details=", ".join(details),
+            )
+        )
+
+    if not items:
+        raise ValueError("No item blocks found in order text.")
+
+    return meta, items
 
 
 def parse_items_rows(rows: List[List[str]]) -> List[Item]:
@@ -172,8 +358,12 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def branding_color(branding: Dict[str, str]) -> str:
-    return branding.get("accent_color") or branding.get("primary_color_hex") or "#2A5CAA"
+def branding_primary_color(branding: Dict[str, str]) -> str:
+    return branding.get("primary_color_hex") or "#004225"
+
+
+def branding_accent_color(branding: Dict[str, str]) -> str:
+    return branding.get("accent_color") or "#CCBF9E"
 
 
 def compute_totals(items: List[Item]) -> Tuple[Decimal, Decimal, Decimal]:
@@ -183,19 +373,23 @@ def compute_totals(items: List[Item]) -> Tuple[Decimal, Decimal, Decimal]:
     return subtotal, tax_total, grand_total
 
 
+def paragraph_escape(value: str) -> str:
+    return html.escape(value, quote=True)
+
+
 def header_footer(canvas, doc, branding: Dict[str, str]):
     canvas.saveState()
     width, height = A4
 
     # Header line
-    canvas.setStrokeColor(colors.HexColor(branding_color(branding)))
+    canvas.setStrokeColor(colors.HexColor(branding_primary_color(branding)))
     canvas.setLineWidth(1)
     canvas.line(15 * mm, height - 20 * mm, width - 15 * mm, height - 20 * mm)
 
     # Footer text
     footer = branding.get("footer_text", "")
     canvas.setFont("Helvetica", 8)
-    canvas.setFillColor(colors.grey)
+    canvas.setFillColor(colors.HexColor(branding_primary_color(branding)))
     canvas.drawString(15 * mm, 12 * mm, footer[:180])
     canvas.restoreState()
 
@@ -209,6 +403,8 @@ def build_document(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
+    primary_color = colors.HexColor(branding_primary_color(branding))
+    accent_color = colors.HexColor(branding_accent_color(branding))
 
     doc = SimpleDocTemplate(
         str(output_path),
@@ -224,21 +420,29 @@ def build_document(
     # Top section: logo + company name
     logo_path = branding.get("logo_path", "")
     logo_exists = logo_path and os.path.exists(logo_path)
-    title_color = colors.HexColor(branding_color(branding))
 
     if logo_exists:
-        story.append(Image(logo_path, width=35 * mm, height=18 * mm))
+        story.append(Image(logo_path, width=42 * mm, height=20 * mm))
         story.append(Spacer(1, 3 * mm))
 
     company_name = branding.get("company_name", "Company")
-    story.append(Paragraph(f"<b>{company_name}</b>", styles["Title"]))
+    company_title_style = styles["Title"].clone("companyTitle")
+    company_title_style.textColor = primary_color
+    story.append(Paragraph(f"<b>{paragraph_escape(company_name)}</b>", company_title_style))
     story.append(Paragraph(branding.get("company_address", ""), styles["Normal"]))
+    company_contact_parts = [
+        branding.get("company_email", "").strip(),
+        branding.get("company_phone", "").strip(),
+    ]
+    company_contact = " | ".join(part for part in company_contact_parts if part)
+    if company_contact:
+        story.append(Paragraph(paragraph_escape(company_contact), styles["Normal"]))
     story.append(Spacer(1, 5 * mm))
 
     # Document title
     title_style = styles["Heading1"].clone("docTitle")
-    title_style.textColor = title_color
-    story.append(Paragraph(doc_type_title, title_style))
+    title_style.textColor = primary_color
+    story.append(Paragraph(paragraph_escape(doc_type_title), title_style))
     story.append(Spacer(1, 4 * mm))
 
     # Metadata table
@@ -246,16 +450,20 @@ def build_document(
         ["Document No.", safe_get(meta, "document_number", "N/A")],
         ["Date", safe_get(meta, "date", utc_now().date().isoformat())],
         ["Customer", safe_get(meta, "customer_name", "")],
-        ["Customer Email", safe_get(meta, "customer_email", "")],
+        ["Status", safe_get(meta, "status", "")],
+        ["Reseller", safe_get(meta, "reseller", "")],
+        ["Agent", safe_get(meta, "agent", "")],
         ["Customer Address", safe_get(meta, "customer_address", "")],
     ]
+    if safe_get(meta, "customer_email", ""):
+        meta_rows.append(["Customer Email", safe_get(meta, "customer_email", "")])
 
     meta_tbl = Table(meta_rows, colWidths=[35 * mm, 145 * mm])
     meta_tbl.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (0, -1), colors.whitesmoke),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                ("BACKGROUND", (0, 0), (0, -1), accent_color),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D8D8D8")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -270,9 +478,16 @@ def build_document(
     # Items table
     item_rows = [["Description", "Qty", "Unit Price", "Tax", "Line Total"]]
     for item in items:
+        description_cell = paragraph_escape(item.description)
+        if item.details:
+            details_markup = paragraph_escape(item.details)
+            description_cell = (
+                f"{description_cell}<br/>"
+                f"<font size='7' color='#666666'>{details_markup}</font>"
+            )
         item_rows.append(
             [
-                item.description,
+                Paragraph(description_cell, styles["Normal"]),
                 str(item.quantity),
                 money(item.unit_price, currency),
                 f"{(item.tax_rate * Decimal('100')).quantize(Decimal('0.01'))}%",
@@ -284,10 +499,11 @@ def build_document(
     item_tbl.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(branding_color(branding))),
+                ("BACKGROUND", (0, 0), (-1, 0), primary_color),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D8D8D8")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F4EC")]),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -308,9 +524,10 @@ def build_document(
     totals_tbl.setStyle(
         TableStyle(
             [
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D8D8D8")),
                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-                ("BACKGROUND", (0, -1), (-1, -1), colors.whitesmoke),
+                ("BACKGROUND", (0, 0), (-1, -1), accent_color),
+                ("TEXTCOLOR", (0, -1), (-1, -1), colors.HexColor("#0F281F")),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
             ]
         )
@@ -318,9 +535,24 @@ def build_document(
     story.append(totals_tbl)
     story.append(Spacer(1, 5 * mm))
 
+    reported_total_cost = safe_get(meta, "reported_total_cost", "")
+    if reported_total_cost:
+        try:
+            reported_total_amount = Decimal(reported_total_cost)
+            if reported_total_amount != grand_total:
+                difference = grand_total - reported_total_amount
+                note = (
+                    "System total differs from order text total by "
+                    f"{money(difference, currency)} (order text: {money(reported_total_amount, currency)})."
+                )
+                story.append(Paragraph(paragraph_escape(note), styles["Italic"]))
+                story.append(Spacer(1, 3 * mm))
+        except InvalidOperation:
+            pass
+
     notes = safe_get(meta, "notes", "")
     if notes:
-        story.append(Paragraph(f"<b>Notes:</b> {notes}", styles["Normal"]))
+        story.append(Paragraph(f"<b>Notes:</b> {paragraph_escape(notes)}", styles["Normal"]))
 
     doc.build(story, onFirstPage=lambda c, d: header_footer(c, d, branding), onLaterPages=lambda c, d: header_footer(c, d, branding))
 
@@ -331,10 +563,12 @@ def load_branding(path: Path) -> Dict[str, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate order confirmation + proforma PDFs from pasted table data.")
-    meta_group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--order-text", help="Raw order block text containing metadata and Item sections")
+    parser.add_argument("--order-file", help="Path to text file containing raw order block")
+    meta_group = parser.add_mutually_exclusive_group(required=False)
     meta_group.add_argument("--meta", help="Path to metadata table file")
     meta_group.add_argument("--meta-text", help="Raw metadata table text (copy/paste)")
-    items_group = parser.add_mutually_exclusive_group(required=True)
+    items_group = parser.add_mutually_exclusive_group(required=False)
     items_group.add_argument("--items", help="Path to items table file")
     items_group.add_argument("--items-text", help="Raw items table text (copy/paste)")
     parser.add_argument("--branding", required=True, help="Path to branding JSON config")
@@ -344,15 +578,28 @@ def main() -> None:
     branding_path = Path(args.branding)
     out_dir = Path(args.output_dir)
 
-    if args.meta_text:
-        meta = parse_meta_rows(read_rows_from_text(args.meta_text.strip()))
+    if args.order_text or args.order_file:
+        if args.order_text and args.order_file:
+            raise ValueError("Use only one of --order-text or --order-file.")
+        order_raw_text = args.order_text
+        if args.order_file:
+            order_raw_text = read_text(Path(args.order_file))
+        meta, items = parse_order_text((order_raw_text or "").strip())
     else:
-        meta = parse_meta(Path(args.meta))
+        if not (args.meta or args.meta_text):
+            raise ValueError("Provide either --order-text or one of --meta / --meta-text.")
+        if not (args.items or args.items_text):
+            raise ValueError("Provide either --order-text or one of --items / --items-text.")
 
-    if args.items_text:
-        items = parse_items_rows(read_rows_from_text(args.items_text.strip()))
-    else:
-        items = parse_items(Path(args.items))
+        if args.meta_text:
+            meta = parse_meta_rows(read_rows_from_text(args.meta_text.strip()))
+        else:
+            meta = parse_meta(Path(args.meta))
+
+        if args.items_text:
+            items = parse_items_rows(read_rows_from_text(args.items_text.strip()))
+        else:
+            items = parse_items(Path(args.items))
 
     branding = load_branding(branding_path)
 
