@@ -4,7 +4,7 @@
   "company_email": "ops@example.com",
   "company_phone": "+00 123 456 789",
   "footer_text": "Internal use only",
-  "logo_path": "assets/logo.png",
+  "logo_path": "assets/artus-logo.png",
   "primary_color_hex": "#004225",
   "accent_color": "#CCBF9E"
 }

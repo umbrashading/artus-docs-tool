@@ -358,6 +358,10 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def format_doc_date(dt: datetime) -> str:
+    return dt.strftime("%d/%m/%Y")
+
+
 def branding_primary_color(branding: Dict[str, str]) -> str:
     return branding.get("primary_color_hex") or "#004225"
 
@@ -377,7 +381,25 @@ def paragraph_escape(value: str) -> str:
     return html.escape(value, quote=True)
 
 
-def header_footer(canvas, doc, branding: Dict[str, str]):
+def footer_lines_for_document(doc_type_title: str, branding: Dict[str, str]) -> List[str]:
+    common_footer = [
+        "Spectrum Supply t/a Umbra Shading, 31 Ystrad Road, Fforestfach, Swansea, SA5 4BT.",
+        "01792 562015 sales@umbrashading.co.uk.",
+        "Company Registration No. 7317206.",
+        "The above pricing excludes VAT.",
+    ]
+    if doc_type_title.lower().startswith("proforma"):
+        common_footer.extend(
+            [
+                "Account Name: Spectrum Supply Ltd",
+                "Sort Code: 12-20-26",
+                "Account Number: 01874691",
+            ]
+        )
+    return common_footer
+
+
+def header_footer(canvas, doc, branding: Dict[str, str], doc_type_title: str):
     canvas.saveState()
     width, height = A4
 
@@ -386,11 +408,13 @@ def header_footer(canvas, doc, branding: Dict[str, str]):
     canvas.setLineWidth(1)
     canvas.line(15 * mm, height - 20 * mm, width - 15 * mm, height - 20 * mm)
 
-    # Footer text
-    footer = branding.get("footer_text", "")
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(colors.HexColor(branding_primary_color(branding)))
-    canvas.drawString(15 * mm, 12 * mm, footer[:180])
+    footer_lines = footer_lines_for_document(doc_type_title, branding)
+    y = 10 * mm
+    for line in footer_lines:
+        canvas.drawString(15 * mm, y, line[:190])
+        y += 3.8 * mm
     canvas.restoreState()
 
 
@@ -412,12 +436,13 @@ def build_document(
         leftMargin=15 * mm,
         rightMargin=15 * mm,
         topMargin=22 * mm,
-        bottomMargin=20 * mm,
+        bottomMargin=42 * mm,
     )
 
     story = []
+    now = utc_now()
 
-    # Top section: logo + company name
+    # Header content section: logo, title, UMA reference (+ dates for proforma)
     logo_path = branding.get("logo_path", "")
     logo_exists = logo_path and os.path.exists(logo_path)
 
@@ -425,30 +450,24 @@ def build_document(
         story.append(Image(logo_path, width=42 * mm, height=20 * mm))
         story.append(Spacer(1, 3 * mm))
 
-    company_name = branding.get("company_name", "Company")
-    company_title_style = styles["Title"].clone("companyTitle")
-    company_title_style.textColor = primary_color
-    story.append(Paragraph(f"<b>{paragraph_escape(company_name)}</b>", company_title_style))
-    story.append(Paragraph(branding.get("company_address", ""), styles["Normal"]))
-    company_contact_parts = [
-        branding.get("company_email", "").strip(),
-        branding.get("company_phone", "").strip(),
-    ]
-    company_contact = " | ".join(part for part in company_contact_parts if part)
-    if company_contact:
-        story.append(Paragraph(paragraph_escape(company_contact), styles["Normal"]))
-    story.append(Spacer(1, 5 * mm))
-
     # Document title
     title_style = styles["Heading1"].clone("docTitle")
     title_style.textColor = primary_color
     story.append(Paragraph(paragraph_escape(doc_type_title), title_style))
-    story.append(Spacer(1, 4 * mm))
+    doc_ref = safe_get(meta, "document_number", "N/A")
+    subheading_style = styles["Heading3"].clone("docRef")
+    subheading_style.textColor = primary_color
+    story.append(Paragraph(f"UMA Order Reference: <b>{paragraph_escape(doc_ref)}</b>", subheading_style))
+    if doc_type_title.lower().startswith("proforma"):
+        date_str = format_doc_date(now)
+        story.append(Paragraph(f"Invoice Date: <b>{date_str}</b>", styles["Normal"]))
+        story.append(Paragraph(f"Due Date: <b>{date_str}</b>", styles["Normal"]))
+    story.append(Spacer(1, 5 * mm))
 
     # Metadata table
     meta_rows = [
         ["Document No.", safe_get(meta, "document_number", "N/A")],
-        ["Date", safe_get(meta, "date", utc_now().date().isoformat())],
+        ["Date", safe_get(meta, "date", format_doc_date(now))],
         ["Customer", safe_get(meta, "customer_name", "")],
         ["Status", safe_get(meta, "status", "")],
         ["Reseller", safe_get(meta, "reseller", "")],
@@ -554,7 +573,11 @@ def build_document(
     if notes:
         story.append(Paragraph(f"<b>Notes:</b> {paragraph_escape(notes)}", styles["Normal"]))
 
-    doc.build(story, onFirstPage=lambda c, d: header_footer(c, d, branding), onLaterPages=lambda c, d: header_footer(c, d, branding))
+    doc.build(
+        story,
+        onFirstPage=lambda c, d: header_footer(c, d, branding, doc_type_title),
+        onLaterPages=lambda c, d: header_footer(c, d, branding, doc_type_title),
+    )
 
 
 def load_branding(path: Path) -> Dict[str, str]:

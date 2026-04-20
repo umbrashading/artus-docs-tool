@@ -105,6 +105,28 @@ Current example uses your requested palette:
 - `primary_color_hex`: `#004225`
 - `accent_color`: `#CCBF9E`
 
+## Current document template rules
+
+### Order Confirmation
+
+- Header: Artus logo, then `Order Confirmation`, then `UMA Order Reference: <ref>`
+- Footer:
+  - Spectrum Supply t/a Umbra Shading, 31 Ystrad Road, Fforestfach, Swansea, SA5 4BT.
+  - 01792 562015 sales@umbrashading.co.uk.
+  - Company Registration No. 7317206.
+  - The above pricing excludes VAT.
+
+### Proforma Invoice
+
+- Header: Artus logo, then `Proforma Invoice`, then `UMA Order Reference: <ref>`
+- Also shows:
+  - `Invoice Date` = date of generation
+  - `Due Date` = date of generation
+- Footer includes the same legal/company text as Order Confirmation, plus:
+  - Account Name: Spectrum Supply Ltd
+  - Sort Code: 12-20-26
+  - Account Number: 01874691
+
 ## Why this is intentionally basic
 
 This is designed as a fast internal MVP:
