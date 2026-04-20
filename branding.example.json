@@ -1,0 +1,9 @@
+{
+  "company_name": "Artus Internal",
+  "company_address": "123 Internal Street, City, Country",
+  "company_email": "ops@example.com",
+  "company_phone": "+00 123 456 789",
+  "footer_text": "Internal use only",
+  "logo_path": "assets/logo.png",
+  "primary_color_hex": "#1F4E79"
+}
