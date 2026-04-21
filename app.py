@@ -73,11 +73,9 @@ def main() -> None:
     col1, col2 = st.columns([2, 1])
     with col1:
         st.subheader("Input")
-        sample = Path("sample_data/order_raw.txt")
-        default_text = sample.read_text(encoding="utf-8") if sample.exists() else ""
         order_text = st.text_area(
             "Paste full order block",
-            value=default_text,
+            value="",
             height=420,
             placeholder="Order:\n[UMA-XXXX] ...\n\nDate:\n...",
         )

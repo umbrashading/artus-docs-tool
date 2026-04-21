@@ -30,6 +30,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     Paragraph,
     SimpleDocTemplate,
@@ -381,6 +382,19 @@ def paragraph_escape(value: str) -> str:
     return html.escape(value, quote=True)
 
 
+def logo_dimensions(logo_path: str, max_width_mm: float) -> Tuple[float, float]:
+    max_width = max_width_mm * mm
+    try:
+        reader = ImageReader(logo_path)
+        original_width, original_height = reader.getSize()
+        if not original_width or not original_height:
+            return max_width, 12 * mm
+        height = (max_width * float(original_height)) / float(original_width)
+        return max_width, height
+    except Exception:
+        return max_width, 12 * mm
+
+
 def footer_lines_for_document(doc_type_title: str, branding: Dict[str, str]) -> List[str]:
     common_footer = [
         "Spectrum Supply t/a Umbra Shading, 31 Ystrad Road, Fforestfach, Swansea, SA5 4BT.",
@@ -447,7 +461,8 @@ def build_document(
     logo_exists = logo_path and os.path.exists(logo_path)
 
     if logo_exists:
-        story.append(Image(logo_path, width=42 * mm, height=20 * mm))
+        logo_width, logo_height = logo_dimensions(logo_path, max_width_mm=64)
+        story.append(Image(logo_path, width=logo_width, height=logo_height))
         story.append(Spacer(1, 3 * mm))
 
     # Document title
@@ -553,6 +568,32 @@ def build_document(
     )
     story.append(totals_tbl)
     story.append(Spacer(1, 5 * mm))
+
+    if doc_type_title.lower().startswith("proforma"):
+        bank_rows = [
+            ["BANK DETAILS", ""],
+            ["Account Name", "Spectrum Supply Ltd"],
+            ["Sort Code", "12-20-26"],
+            ["Account Number", "01874691"],
+        ]
+        bank_tbl = Table(bank_rows, colWidths=[40 * mm, 110 * mm])
+        bank_tbl.setStyle(
+            TableStyle(
+                [
+                    ("SPAN", (0, 0), (1, 0)),
+                    ("BACKGROUND", (0, 0), (1, 0), primary_color),
+                    ("TEXTCOLOR", (0, 0), (1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (1, 0), "Helvetica-Bold"),
+                    ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+                    ("BACKGROUND", (0, 1), (0, -1), accent_color),
+                    ("GRID", (0, 0), (1, -1), 0.4, colors.HexColor("#D8D8D8")),
+                    ("FONTSIZE", (0, 0), (1, -1), 10),
+                    ("VALIGN", (0, 0), (1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        story.append(bank_tbl)
+        story.append(Spacer(1, 4 * mm))
 
     reported_total_cost = safe_get(meta, "reported_total_cost", "")
     if reported_total_cost:
