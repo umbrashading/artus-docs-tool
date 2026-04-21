@@ -32,7 +32,7 @@ def _is_authorized() -> bool:
 def _logo_preview(branding: dict) -> None:
     logo_path = branding.get("logo_path", "")
     if logo_path and Path(logo_path).exists():
-        st.image(logo_path, width=220)
+        st.image(logo_path, width=1216)
     else:
         st.caption("Logo not found at configured path. PDFs will still generate.")
 
