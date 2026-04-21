@@ -1,0 +1,289 @@
+Order:
+
+[UMA-1217] oedert 18/03/26
+
+Date:
+
+18/04/2026
+
+Status:
+
+For Review
+
+Reseller:
+
+Superior Interior Shutters
+
+Agent:
+
+Steven Chisholm
+
+Client:
+
+dolores o2
+
+Address:
+
+2 Octavian way
+
+Total Cost:
+
+568.95 GBP
+
+Item: 1
+
+Reference:
+
+bed 1
+
+ProductID:
+
+Full Height Shutter
+
+Install:
+
+Full Height
+
+Mount:
+
+Inside
+
+Colour:
+
+Traffic White
+
+Stile:
+
+Astragal Bead
+
+Frame:
+
+L Frame
+
+Frame_Sides:
+
+5
+
+Louvre:
+
+70 mm
+
+Sqm:
+
+1.9125
+
+Width:
+
+1700
+
+Height:
+
+1125
+
+Total_Cost:
+
+263.92
+
+FrameSides:
+
+4LRTB
+
+Item: 2
+
+Reference:
+
+bed 2
+
+ProductID:
+
+Full Height Shutter
+
+Install:
+
+Full Height
+
+Mount:
+
+Inside
+
+Colour:
+
+Traffic White
+
+Stile:
+
+Astragal Bead
+
+Frame:
+
+L Frame
+
+Frame_Sides:
+
+5
+
+Louvre:
+
+70 mm
+
+Sqm:
+
+0.6334
+
+Width:
+
+564
+
+Height:
+
+1123
+
+Total_Cost:
+
+87.41
+
+FrameSides:
+
+4LRTB
+
+Item: 3
+
+Reference:
+
+bath
+
+ProductID:
+
+Full Height Shutter
+
+Install:
+
+Full Height
+
+Mount:
+
+Inside
+
+Colour:
+
+Traffic White
+
+Stile:
+
+Astragal Bead
+
+Frame:
+
+L Frame
+
+Frame_Sides:
+
+5
+
+Louvre:
+
+70 mm
+
+Sqm:
+
+0.9032
+
+Width:
+
+805
+
+Height:
+
+1122
+
+Total_Cost:
+
+124.64
+
+FrameSides:
+
+4LRTB
+
+Item: 4
+
+Reference:
+
+bay 1
+
+ProductID:
+
+Batten
+
+Install:
+
+Batten
+
+Colour:
+
+Traffic White
+
+Width:
+
+50
+
+Total_Cost:
+
+4.80
+
+Item: 5
+
+Reference:
+
+bay 1
+
+ProductID:
+
+Full Height Shutter
+
+Install:
+
+Full Height
+
+Mount:
+
+Inside
+
+Colour:
+
+Traffic White
+
+Stile:
+
+Square Butted
+
+Frame:
+
+L Frame
+
+Frame_Sides:
+
+5
+
+Louvre:
+
+70 mm
+
+Sqm:
+
+0.6390
+
+Width:
+
+450
+
+Height:
+
+1420
+
+Total_Cost:
+
+88.18
+
+FrameSides:
+
+4LRTB
