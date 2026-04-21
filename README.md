@@ -146,6 +146,12 @@ This repo now includes a very basic web UI (`app.py`) for internal use:
 - click "Generate PDFs"
 - download Order Confirmation + Proforma directly
 
+Recent UX updates:
+
+- input paste box now starts blank (no default sample text)
+- logo rendering keeps original aspect ratio to avoid stretching
+- proforma now shows a prominent "Bank Details" panel above footer content
+
 ### Run locally
 
 ```bash
