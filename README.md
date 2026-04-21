@@ -137,3 +137,46 @@ This is designed as a fast internal MVP:
 - minimal assumptions
 
 If needed, this can later be wrapped in a tiny web interface (Flask/Streamlit) with copy/paste text areas.
+
+## Deploy-ready web UI (Streamlit)
+
+This repo now includes a very basic web UI (`app.py`) for internal use:
+
+- paste raw UMA order text
+- click "Generate PDFs"
+- download Order Confirmation + Proforma directly
+
+### Run locally
+
+```bash
+streamlit run app.py
+```
+
+### Optional internal password protection
+
+Set environment variable `APP_PASSWORD`. If set, users must enter this password before generating PDFs.
+
+Example local run:
+
+```bash
+APP_PASSWORD="your-internal-password" streamlit run app.py
+```
+
+## Render deployment
+
+This repo includes:
+
+- `render.yaml` (Blueprint deployment config)
+- `Procfile` (fallback process command)
+
+The app starts with:
+
+```bash
+streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+```
+
+After deployment, upload your logo to the repository at:
+
+- `assets/artus-logo.png`
+
+and ensure branding config points to that path (`branding.example.json` already does).
