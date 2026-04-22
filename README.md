@@ -122,6 +122,8 @@ Current example uses your requested palette:
 - Also shows:
   - `Invoice Date` = date of generation
   - `Due Date` = date of generation
+- Pricing:
+  - VAT is added at `20%` on proforma invoices
 - Footer includes the same legal/company text as Order Confirmation, plus:
   - Account Name: Spectrum Supply Ltd
   - Sort Code: 12-20-26

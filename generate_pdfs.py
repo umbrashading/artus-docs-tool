@@ -455,6 +455,8 @@ def build_document(
 
     story = []
     now = utc_now()
+    is_proforma = doc_type_title.lower().startswith("proforma")
+    proforma_vat_rate = Decimal("0.20")
 
     # Header content section: logo, title, UMA reference (+ dates for proforma)
     logo_path = branding.get("logo_path", "")
@@ -512,6 +514,8 @@ def build_document(
     # Items table
     item_rows = [["Description", "Qty", "Unit Price", "Tax", "Line Total"]]
     for item in items:
+        line_tax_rate = proforma_vat_rate if is_proforma else item.tax_rate
+        line_total = item.net_total * (Decimal("1") + line_tax_rate)
         description_cell = paragraph_escape(item.description)
         if item.details:
             details_markup = paragraph_escape(item.details)
@@ -524,8 +528,8 @@ def build_document(
                 Paragraph(description_cell, styles["Normal"]),
                 str(item.quantity),
                 money(item.unit_price, currency),
-                f"{(item.tax_rate * Decimal('100')).quantize(Decimal('0.01'))}%",
-                money(item.gross_total, currency),
+                f"{(line_tax_rate * Decimal('100')).quantize(Decimal('0.01'))}%",
+                money(line_total, currency),
             ]
         )
 
@@ -547,10 +551,18 @@ def build_document(
     story.append(item_tbl)
     story.append(Spacer(1, 5 * mm))
 
-    subtotal, tax_total, grand_total = compute_totals(items)
+    if is_proforma:
+        subtotal = sum((i.net_total for i in items), Decimal("0"))
+        tax_total = subtotal * proforma_vat_rate
+        grand_total = subtotal + tax_total
+        tax_label = "VAT (20%)"
+    else:
+        subtotal, tax_total, grand_total = compute_totals(items)
+        tax_label = "Tax"
+
     totals_rows = [
         ["Subtotal", money(subtotal, currency)],
-        ["Tax", money(tax_total, currency)],
+        [tax_label, money(tax_total, currency)],
         ["Total", money(grand_total, currency)],
     ]
 
@@ -599,10 +611,12 @@ def build_document(
     if reported_total_cost:
         try:
             reported_total_amount = Decimal(reported_total_cost)
-            if reported_total_amount != grand_total:
-                difference = grand_total - reported_total_amount
+            reference_total = subtotal if is_proforma else grand_total
+            if reported_total_amount != reference_total:
+                difference = reference_total - reported_total_amount
+                reference_label = "subtotal" if is_proforma else "total"
                 note = (
-                    "System total differs from order text total by "
+                    f"System {reference_label} differs from order text total by "
                     f"{money(difference, currency)} (order text: {money(reported_total_amount, currency)})."
                 )
                 story.append(Paragraph(paragraph_escape(note), styles["Italic"]))
