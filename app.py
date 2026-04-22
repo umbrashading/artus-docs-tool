@@ -70,6 +70,9 @@ def main() -> None:
 
     branding = load_branding(branding_path)
 
+    if "generated_pdfs" not in st.session_state:
+        st.session_state.generated_pdfs = None
+
     col1, col2 = st.columns([2, 1])
     with col1:
         st.subheader("Input")
@@ -104,21 +107,30 @@ def main() -> None:
             st.stop()
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        st.success(f"Generated successfully at {timestamp}")
+        st.session_state.generated_pdfs = {
+            "order_bytes": order_bytes,
+            "proforma_bytes": proforma_bytes,
+            "doc_no": doc_no,
+            "timestamp": timestamp,
+        }
+
+    generated_pdfs = st.session_state.generated_pdfs
+    if generated_pdfs:
+        st.success(f"Generated successfully at {generated_pdfs['timestamp']}")
 
         d1, d2 = st.columns(2)
         with d1:
             st.download_button(
                 "Download Order Confirmation",
-                data=io.BytesIO(order_bytes),
-                file_name=f"order_confirmation_{doc_no}.pdf",
+                data=io.BytesIO(generated_pdfs["order_bytes"]),
+                file_name=f"order_confirmation_{generated_pdfs['doc_no']}.pdf",
                 mime="application/pdf",
             )
         with d2:
             st.download_button(
                 "Download Proforma Invoice",
-                data=io.BytesIO(proforma_bytes),
-                file_name=f"proforma_{doc_no}.pdf",
+                data=io.BytesIO(generated_pdfs["proforma_bytes"]),
+                file_name=f"proforma_{generated_pdfs['doc_no']}.pdf",
                 mime="application/pdf",
             )
 
